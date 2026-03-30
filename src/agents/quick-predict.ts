@@ -26,7 +26,8 @@ Confidence should reflect how clear the edge is (0.5 = coin flip, 0.9 = very str
 export async function runQuickPredictions(
   date: string
 ): Promise<BatchQuickPredictions | null> {
-  const { text } = await generateText({
+  console.log(`[quick-predict] Step 1: Gathering data for ${date}...`);
+  const { text, steps } = await generateText({
     model: google("gemini-2.5-flash"),
     system: SYSTEM_PROMPT,
     prompt: `Analyze all NBA games for ${date}. First fetch the games, then gather team stats and recent games for each team. Finally, generate moneyline and total predictions for every game.`,
@@ -38,12 +39,15 @@ export async function runQuickPredictions(
     stopWhen: stepCountIs(15),
   });
 
-  // Now generate structured output from the analysis
+  console.log(`[quick-predict] Step 1 done. ${steps.length} steps, ${text.length} chars.`);
+  console.log(`[quick-predict] Step 2: Generating structured output...`);
+
   const { output } = await generateText({
     model: google("gemini-2.5-flash"),
     output: Output.object({ schema: batchQuickPredictions }),
     prompt: `Based on this analysis, generate structured predictions:\n\n${text}\n\nReturn moneyline and total predictions for each game on ${date}.`,
   });
 
+  console.log(`[quick-predict] Done. ML: ${output?.moneyline?.length ?? 0}, Totals: ${output?.totals?.length ?? 0}`);
   return output;
 }

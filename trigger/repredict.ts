@@ -9,14 +9,50 @@ import { formatDailyPredictions } from "../src/lib/format";
 export const repredictTask = task({
   id: "repredict",
   run: async ({ date, chatId }: { date: string; chatId: string }) => {
-    console.log(`[repredict] Running predictions for ${date}`);
+    console.log(`[repredict] Starting predictions for ${date}`);
 
-    const playerPreds = await runPlayerPredictions(date);
-    const quick = await runQuickPredictions(date);
-    const deep = await runDeepAnalysis(date);
+    let playerPreds = null;
+    let quick = null;
+    let deep = null;
+
+    try {
+      console.log(`[repredict] Running player predictions...`);
+      playerPreds = await runPlayerPredictions(date);
+      console.log(`[repredict] Player predictions done:`, {
+        props: playerPreds?.props?.length ?? 0,
+        specials: playerPreds?.specials?.length ?? 0,
+      });
+    } catch (err: any) {
+      console.error(`[repredict] Player predictions FAILED:`, err.message);
+      await notifyChat(chatId, `⚠️ Player predictions failed: ${err.message}`);
+    }
+
+    try {
+      console.log(`[repredict] Running quick predictions...`);
+      quick = await runQuickPredictions(date);
+      console.log(`[repredict] Quick predictions done:`, {
+        moneyline: quick?.moneyline?.length ?? 0,
+        totals: quick?.totals?.length ?? 0,
+      });
+    } catch (err: any) {
+      console.error(`[repredict] Quick predictions FAILED:`, err.message);
+      await notifyChat(chatId, `⚠️ Quick predictions failed: ${err.message}`);
+    }
+
+    try {
+      console.log(`[repredict] Running deep analysis...`);
+      deep = await runDeepAnalysis(date);
+      console.log(`[repredict] Deep analysis done:`, {
+        spreads: deep?.spreads?.length ?? 0,
+        playerProps: deep?.playerProps?.length ?? 0,
+      });
+    } catch (err: any) {
+      console.error(`[repredict] Deep analysis FAILED:`, err.message);
+      await notifyChat(chatId, `⚠️ Deep analysis failed: ${err.message}`);
+    }
 
     if (!quick && !deep && !playerPreds) {
-      await notifyChat(chatId, `No NBA games found for ${date}.`);
+      await notifyChat(chatId, `No NBA games found for ${date}, or all agents failed.`);
       return { status: "no_games", date };
     }
 

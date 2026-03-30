@@ -44,8 +44,9 @@ Set prop lines based on the player's season average for that stat.`;
 export async function runPlayerPredictions(
   date: string
 ): Promise<BatchPlayerPredictions | null> {
+  console.log(`[player-predict] Step 1: Gathering data for ${date}...`);
   // Step 1: Gather data via tool loop
-  const { text } = await generateText({
+  const { text, steps } = await generateText({
     model: google("gemini-2.5-pro"),
     system: SYSTEM_PROMPT,
     prompt: `Analyze ALL NBA games for ${date}. For each game:
@@ -65,6 +66,8 @@ Focus on players most likely to hit specific stat thresholds with high confidenc
     stopWhen: stepCountIs(25),
   });
 
+  console.log(`[player-predict] Step 1 done. ${steps.length} steps, ${text.length} chars of analysis.`);
+  console.log(`[player-predict] Step 2: Generating structured output...`);
   // Step 2: Generate structured predictions from the analysis
   const { output } = await generateText({
     model: google("gemini-2.5-pro"),
@@ -84,5 +87,6 @@ ${text}
 Generate player prop predictions and special predictions (double-double/triple-double) for ${date}.`,
   });
 
+  console.log(`[player-predict] Step 2 done. Props: ${output?.props?.length ?? 0}, Specials: ${output?.specials?.length ?? 0}`);
   return output;
 }

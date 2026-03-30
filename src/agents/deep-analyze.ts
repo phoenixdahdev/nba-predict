@@ -28,7 +28,8 @@ Use specific numbers in reasoning. Be conservative with confidence — this is h
 export async function runDeepAnalysis(
   date: string
 ): Promise<BatchDeepPredictions | null> {
-  const { text } = await generateText({
+  console.log(`[deep-analyze] Step 1: Gathering data for ${date}...`);
+  const { text, steps } = await generateText({
     model: google("gemini-2.5-pro"),
     system: SYSTEM_PROMPT,
     prompt: `Perform deep analysis on all NBA games for ${date}. Fetch games, team stats, player stats, and recent form. Generate spread predictions and player prop predictions for key players.`,
@@ -41,12 +42,14 @@ export async function runDeepAnalysis(
     stopWhen: stepCountIs(20),
   });
 
-  // Generate structured output
+  console.log(`[deep-analyze] Step 1 done. ${steps.length} steps, ${text.length} chars.`);
+  console.log(`[deep-analyze] Step 2: Generating structured output...`);
   const { output } = await generateText({
     model: google("gemini-2.5-pro"),
     output: Output.object({ schema: batchDeepPredictions }),
     prompt: `Based on this deep analysis, generate structured spread and player prop predictions:\n\n${text}\n\nReturn spread predictions for each game and player prop predictions for the top players on ${date}.`,
   });
 
+  console.log(`[deep-analyze] Done. Spreads: ${output?.spreads?.length ?? 0}, Props: ${output?.playerProps?.length ?? 0}`);
   return output;
 }
