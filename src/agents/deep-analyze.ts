@@ -39,7 +39,7 @@ export async function runDeepAnalysis(
       fetchTeamStats: fetchTeamStatsTool,
       fetchRecentGames: fetchRecentGamesTool,
     },
-    stopWhen: stepCountIs(20),
+    stopWhen: stepCountIs(10),
   });
 
   console.log(`[deep-analyze] Step 1 done. ${steps.length} steps, ${text.length} chars.`);

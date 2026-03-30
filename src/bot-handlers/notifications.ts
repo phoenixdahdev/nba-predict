@@ -7,6 +7,14 @@ async function getBotInstance() {
 }
 
 /**
+ * Normalize a chat ID for openDM — ensure it has exactly one "telegram:" prefix.
+ */
+function normalizeTelegramId(id: string): string {
+  const raw = id.replace(/^telegram:/i, "");
+  return `telegram:${raw}`;
+}
+
+/**
  * Send a message to all active subscribers.
  */
 export async function notifyAllSubscribers(message: string): Promise<void> {
@@ -14,8 +22,8 @@ export async function notifyAllSubscribers(message: string): Promise<void> {
 
   const results = await Promise.allSettled(
     subs.map(async (sub) => {
-      const chatId = sub.platformId.replace("telegram:", "");
-      const thread = await bot.openDM(`telegram:${chatId}`);
+      const dmId = normalizeTelegramId(sub.platformId);
+      const thread = await bot.openDM(dmId);
       await thread.post(message);
     })
   );
@@ -34,6 +42,8 @@ export async function notifyChat(
   message: string
 ): Promise<void> {
   const bot = await getBotInstance();
-  const thread = await bot.openDM(`telegram:${chatId}`);
+  const dmId = normalizeTelegramId(chatId);
+  console.log(`[notifications] Sending to ${dmId}`);
+  const thread = await bot.openDM(dmId);
   await thread.post(message);
 }

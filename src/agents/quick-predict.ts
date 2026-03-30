@@ -36,7 +36,7 @@ export async function runQuickPredictions(
       fetchTeamStats: fetchTeamStatsTool,
       fetchRecentGames: fetchRecentGamesTool,
     },
-    stopWhen: stepCountIs(15),
+    stopWhen: stepCountIs(8),
   });
 
   console.log(`[quick-predict] Step 1 done. ${steps.length} steps, ${text.length} chars.`);

@@ -63,7 +63,7 @@ Focus on players most likely to hit specific stat thresholds with high confidenc
       fetchTeamStats: fetchTeamStatsTool,
       fetchRecentGames: fetchRecentGamesTool,
     },
-    stopWhen: stepCountIs(25),
+    stopWhen: stepCountIs(10),
   });
 
   console.log(`[player-predict] Step 1 done. ${steps.length} steps, ${text.length} chars of analysis.`);

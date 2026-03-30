@@ -15,6 +15,7 @@ export const repredictTask = task({
     let quick = null;
     let deep = null;
 
+    // Run player predictions first (main product), then quick + deep in parallel
     try {
       console.log(`[repredict] Running player predictions...`);
       playerPreds = await runPlayerPredictions(date);
@@ -27,28 +28,33 @@ export const repredictTask = task({
       await notifyChat(chatId, `⚠️ Player predictions failed: ${err.message}`);
     }
 
-    try {
-      console.log(`[repredict] Running quick predictions...`);
-      quick = await runQuickPredictions(date);
+    // Run quick + deep in parallel to save time
+    console.log(`[repredict] Running quick + deep in parallel...`);
+    const [quickResult, deepResult] = await Promise.allSettled([
+      runQuickPredictions(date),
+      runDeepAnalysis(date),
+    ]);
+
+    if (quickResult.status === "fulfilled") {
+      quick = quickResult.value;
       console.log(`[repredict] Quick predictions done:`, {
         moneyline: quick?.moneyline?.length ?? 0,
         totals: quick?.totals?.length ?? 0,
       });
-    } catch (err: any) {
-      console.error(`[repredict] Quick predictions FAILED:`, err.message);
-      await notifyChat(chatId, `⚠️ Quick predictions failed: ${err.message}`);
+    } else {
+      console.error(`[repredict] Quick predictions FAILED:`, quickResult.reason?.message);
+      await notifyChat(chatId, `⚠️ Quick predictions failed: ${quickResult.reason?.message}`);
     }
 
-    try {
-      console.log(`[repredict] Running deep analysis...`);
-      deep = await runDeepAnalysis(date);
+    if (deepResult.status === "fulfilled") {
+      deep = deepResult.value;
       console.log(`[repredict] Deep analysis done:`, {
         spreads: deep?.spreads?.length ?? 0,
         playerProps: deep?.playerProps?.length ?? 0,
       });
-    } catch (err: any) {
-      console.error(`[repredict] Deep analysis FAILED:`, err.message);
-      await notifyChat(chatId, `⚠️ Deep analysis failed: ${err.message}`);
+    } else {
+      console.error(`[repredict] Deep analysis FAILED:`, deepResult.reason?.message);
+      await notifyChat(chatId, `⚠️ Deep analysis failed: ${deepResult.reason?.message}`);
     }
 
     if (!quick && !deep && !playerPreds) {
