@@ -46,7 +46,7 @@ export async function runPlayerPredictions(
 ): Promise<BatchPlayerPredictions | null> {
   // Step 1: Gather data via tool loop
   const { text } = await generateText({
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.5-pro"),
     system: SYSTEM_PROMPT,
     prompt: `Analyze ALL NBA games for ${date}. For each game:
 1. Fetch the games
@@ -67,7 +67,7 @@ Focus on players most likely to hit specific stat thresholds with high confidenc
 
   // Step 2: Generate structured predictions from the analysis
   const { output } = await generateText({
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.5-pro"),
     output: Output.object({ schema: batchPlayerPredictions }),
     prompt: `Based on this player analysis, generate structured predictions.
 

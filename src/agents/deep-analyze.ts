@@ -29,7 +29,7 @@ export async function runDeepAnalysis(
   date: string
 ): Promise<BatchDeepPredictions | null> {
   const { text } = await generateText({
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.5-pro"),
     system: SYSTEM_PROMPT,
     prompt: `Perform deep analysis on all NBA games for ${date}. Fetch games, team stats, player stats, and recent form. Generate spread predictions and player prop predictions for key players.`,
     tools: {
@@ -43,7 +43,7 @@ export async function runDeepAnalysis(
 
   // Generate structured output
   const { output } = await generateText({
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.5-pro"),
     output: Output.object({ schema: batchDeepPredictions }),
     prompt: `Based on this deep analysis, generate structured spread and player prop predictions:\n\n${text}\n\nReturn spread predictions for each game and player prop predictions for the top players on ${date}.`,
   });

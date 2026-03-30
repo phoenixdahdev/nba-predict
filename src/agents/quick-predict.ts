@@ -27,7 +27,7 @@ export async function runQuickPredictions(
   date: string
 ): Promise<BatchQuickPredictions | null> {
   const { text } = await generateText({
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.5-flash"),
     system: SYSTEM_PROMPT,
     prompt: `Analyze all NBA games for ${date}. First fetch the games, then gather team stats and recent games for each team. Finally, generate moneyline and total predictions for every game.`,
     tools: {
@@ -40,7 +40,7 @@ export async function runQuickPredictions(
 
   // Now generate structured output from the analysis
   const { output } = await generateText({
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.5-flash"),
     output: Output.object({ schema: batchQuickPredictions }),
     prompt: `Based on this analysis, generate structured predictions:\n\n${text}\n\nReturn moneyline and total predictions for each game on ${date}.`,
   });

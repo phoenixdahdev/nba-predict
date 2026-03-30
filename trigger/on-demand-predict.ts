@@ -32,7 +32,7 @@ export const onDemandPredict = task({
 
     // Get the team's game today
     const { text } = await generateText({
-      model: google("gemini-2.0-flash"),
+      model: google("gemini-2.5-flash"),
       system: `You are an NBA analyst. Find and analyze the game for team ${teamAbbr} on ${date}. Fetch game data, team stats, and recent form. Provide a complete prediction.`,
       prompt: `Analyze ${teamAbbr}'s game on ${date}. Fetch the games for today, then get team stats and recent games for both teams in the matchup.`,
       tools: {
@@ -45,7 +45,7 @@ export const onDemandPredict = task({
 
     // Generate structured prediction
     const { output } = await generateText({
-      model: google("gemini-2.0-flash"),
+      model: google("gemini-2.5-flash"),
       output: Output.object({ schema: onDemandSchema }),
       prompt: `Based on this analysis for ${teamAbbr} on ${date}:\n\n${text}\n\nGenerate moneyline, total, and spread predictions.`,
     });
@@ -66,7 +66,7 @@ export const onDemandPredict = task({
         await insertPrediction({
           gameId: game.id,
           type,
-          modelUsed: "google/gemini-2.0-flash",
+          modelUsed: "google/gemini-2.5-flash",
           prediction: pred,
           confidence: pred.confidence,
           reasoning: pred.reasoning,

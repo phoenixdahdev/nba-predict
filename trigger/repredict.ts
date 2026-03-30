@@ -36,7 +36,7 @@ export const repredictTask = task({
           await insertPrediction({
             gameId: game.id,
             type: "player_prop",
-            modelUsed: "google/gemini-2.0-flash",
+            modelUsed: "google/gemini-2.5",
             prediction: prop,
             confidence: prop.confidence,
             reasoning: prop.reasoning,
@@ -51,7 +51,7 @@ export const repredictTask = task({
           await insertPrediction({
             gameId: game.id,
             type: special.type,
-            modelUsed: "google/gemini-2.0-flash",
+            modelUsed: "google/gemini-2.5",
             prediction: special,
             confidence: special.confidence,
             reasoning: special.reasoning,
@@ -69,7 +69,7 @@ export const repredictTask = task({
           await insertPrediction({
             gameId: game.id,
             type: "moneyline",
-            modelUsed: "google/gemini-2.0-flash",
+            modelUsed: "google/gemini-2.5",
             prediction: ml,
             confidence: ml.confidence,
             reasoning: ml.reasoning,
@@ -84,7 +84,7 @@ export const repredictTask = task({
           await insertPrediction({
             gameId: game.id,
             type: "total",
-            modelUsed: "google/gemini-2.0-flash",
+            modelUsed: "google/gemini-2.5",
             prediction: total,
             confidence: total.confidence,
             reasoning: total.reasoning,
@@ -101,7 +101,7 @@ export const repredictTask = task({
           await insertPrediction({
             gameId: game.id,
             type: "spread",
-            modelUsed: "google/gemini-2.0-flash",
+            modelUsed: "google/gemini-2.5",
             prediction: spread,
             confidence: spread.confidence,
             reasoning: spread.reasoning,
@@ -116,7 +116,7 @@ export const repredictTask = task({
           await insertPrediction({
             gameId: game.id,
             type: "player_prop",
-            modelUsed: "google/gemini-2.0-flash",
+            modelUsed: "google/gemini-2.5",
             prediction: prop,
             confidence: prop.confidence,
             reasoning: prop.reasoning,
