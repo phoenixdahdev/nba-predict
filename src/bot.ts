@@ -2,18 +2,32 @@ import { Chat } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createRedisState } from "@chat-adapter/state-redis";
 
-export const bot = new Chat({
-  userName: "nba-predict-bot",
-  adapters: {
-    telegram: createTelegramAdapter(),
-  },
-  state: createRedisState({
-    url: process.env.REDIS_URL,
-  }),
-});
+let _bot: Chat | undefined;
 
-// Lazy-register commands to avoid circular imports
-// (commands.ts and notifications.ts both reference bot)
-import("./bot-handlers/commands").then(({ registerCommands }) => {
-  registerCommands(bot);
-});
+export function getBot(): Chat {
+  if (!_bot) {
+    _bot = new Chat({
+      userName: "nba-predict-bot",
+      adapters: {
+        telegram: createTelegramAdapter(),
+      },
+      state: createRedisState({
+        url: process.env.REDIS_URL,
+      }),
+    });
+
+    // Register commands lazily
+    import("./bot-handlers/commands").then(({ registerCommands }) => {
+      registerCommands(_bot!);
+    });
+  }
+  return _bot;
+}
+
+// For backwards compat with notifications.ts etc
+export const bot = {
+  get webhooks() {
+    return getBot().webhooks;
+  },
+  openDM: (...args: Parameters<Chat["openDM"]>) => getBot().openDM(...args),
+};

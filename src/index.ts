@@ -1,7 +1,4 @@
 import { Elysia } from "elysia";
-import { telegramRoutes } from "./routes/telegram";
-import { predictionRoutes } from "./routes/predictions";
-import { accuracyRoutes } from "./routes/accuracy";
 
 const app = new Elysia()
   .get("/health", () => ({
@@ -9,8 +6,67 @@ const app = new Elysia()
     timestamp: new Date().toISOString(),
     service: "nba-predict",
   }))
-  .use(telegramRoutes)
-  .use(predictionRoutes)
-  .use(accuracyRoutes);
+  .post("/telegram/webhook", async ({ request }) => {
+    const { getBot } = await import("./bot");
+    await getBot().webhooks.telegram!(request);
+    return { ok: true };
+  })
+  .get("/api/predictions", async ({ query }) => {
+    const { db } = await import("./db");
+    const { predictions, games } = await import("./db/schema");
+    const { eq, desc } = await import("drizzle-orm");
+
+    const dateFilter = query.date as string | undefined;
+    const rows = await db
+      .select({
+        id: predictions.id,
+        type: predictions.type,
+        prediction: predictions.prediction,
+        confidence: predictions.confidence,
+        reasoning: predictions.reasoning,
+        result: predictions.result,
+        createdAt: predictions.createdAt,
+        gameDate: games.gameDate,
+      })
+      .from(predictions)
+      .innerJoin(games, eq(predictions.gameId, games.id))
+      .where(dateFilter ? eq(games.gameDate, dateFilter) : undefined)
+      .orderBy(desc(predictions.createdAt))
+      .limit(50);
+
+    return { predictions: rows };
+  })
+  .get("/api/predictions/:gameId", async ({ params }) => {
+    const { db } = await import("./db");
+    const { predictions } = await import("./db/schema");
+    const { eq } = await import("drizzle-orm");
+
+    const gameId = parseInt(params.gameId);
+    const rows = await db
+      .select()
+      .from(predictions)
+      .where(eq(predictions.gameId, gameId))
+      .orderBy(predictions.type);
+
+    return { predictions: rows };
+  })
+  .get("/api/accuracy", async () => {
+    const { db } = await import("./db");
+    const { predictions } = await import("./db/schema");
+    const { isNotNull, sql } = await import("drizzle-orm");
+
+    const overall = await db
+      .select({
+        type: predictions.type,
+        total: sql<number>`count(*)`.as("total"),
+        correct: sql<number>`count(*) filter (where ${predictions.result} = 'correct')`.as("correct"),
+        accuracy: sql<number>`round(count(*) filter (where ${predictions.result} = 'correct')::numeric / nullif(count(*), 0) * 100, 1)`.as("accuracy"),
+      })
+      .from(predictions)
+      .where(isNotNull(predictions.result))
+      .groupBy(predictions.type);
+
+    return { accuracy: overall };
+  });
 
 export default app;
