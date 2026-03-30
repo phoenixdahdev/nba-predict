@@ -11,11 +11,15 @@ const app = new Elysia()
   }))
   .use(telegramRoutes)
   .use(predictionRoutes)
-  .use(accuracyRoutes)
-  .listen(process.env.PORT ?? 3000);
+  .use(accuracyRoutes);
 
-console.log(
-  `🏀 NBA Predict running at http://${app.server?.hostname}:${app.server?.port}`
-);
+// Local dev: start the server
+// Vercel: uses the exported fetch handler via api/index.ts
+if (process.env.NODE_ENV !== "production") {
+  app.listen(process.env.PORT ?? 3000);
+  console.log(
+    `🏀 NBA Predict running at http://${app.server?.hostname}:${app.server?.port}`
+  );
+}
 
 export default app;
