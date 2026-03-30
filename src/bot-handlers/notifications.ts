@@ -1,11 +1,16 @@
-import { bot } from "../bot";
 import { getActiveSubscribers } from "../db/queries";
+
+// Lazy import to avoid circular dependency (bot.ts → commands.ts → notifications.ts → bot.ts)
+async function getBot() {
+  const { bot } = await import("../bot");
+  return bot;
+}
 
 /**
  * Send a message to all active subscribers.
  */
 export async function notifyAllSubscribers(message: string): Promise<void> {
-  const subs = await getActiveSubscribers();
+  const [subs, bot] = await Promise.all([getActiveSubscribers(), getBot()]);
 
   const results = await Promise.allSettled(
     subs.map(async (sub) => {
@@ -28,6 +33,7 @@ export async function notifyChat(
   chatId: string,
   message: string
 ): Promise<void> {
+  const bot = await getBot();
   const thread = await bot.openDM(`telegram:${chatId}`);
   await thread.post(message);
 }

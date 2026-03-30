@@ -1,7 +1,6 @@
 import { Chat } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createRedisState } from "@chat-adapter/state-redis";
-import { registerCommands } from "./bot-handlers/commands";
 
 export const bot = new Chat({
   userName: "nba-predict-bot",
@@ -13,4 +12,8 @@ export const bot = new Chat({
   }),
 });
 
-registerCommands(bot);
+// Lazy-register commands to avoid circular imports
+// (commands.ts and notifications.ts both reference bot)
+import("./bot-handlers/commands").then(({ registerCommands }) => {
+  registerCommands(bot);
+});
