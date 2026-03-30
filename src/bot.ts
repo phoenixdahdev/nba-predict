@@ -3,8 +3,9 @@ import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createRedisState } from "@chat-adapter/state-redis";
 
 let _bot: Chat | undefined;
+let _ready: Promise<void> | undefined;
 
-export function getBot(): Chat {
+export async function getBot(): Promise<Chat> {
   if (!_bot) {
     _bot = new Chat({
       userName: "nba-predict-bot",
@@ -16,18 +17,13 @@ export function getBot(): Chat {
       }),
     });
 
-    // Register commands lazily
-    import("./bot-handlers/commands").then(({ registerCommands }) => {
+    // Register commands and wait for it to complete
+    _ready = import("./bot-handlers/commands").then(({ registerCommands }) => {
       registerCommands(_bot!);
     });
   }
+
+  // Ensure commands are registered before returning
+  await _ready;
   return _bot;
 }
-
-// For backwards compat with notifications.ts etc
-export const bot = {
-  get webhooks() {
-    return getBot().webhooks;
-  },
-  openDM: (...args: Parameters<Chat["openDM"]>) => getBot().openDM(...args),
-};

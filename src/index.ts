@@ -1,15 +1,46 @@
 import { Elysia } from "elysia";
+import { appendFileSync } from "fs";
+
+const LOG_FILE = "./dev.log";
+
+function log(msg: string, data?: unknown) {
+  const line = `[${new Date().toISOString()}] ${msg}${data ? " " + JSON.stringify(data, null, 2) : ""}\n`;
+  process.stdout.write(line);
+  try { appendFileSync(LOG_FILE, line); } catch {}
+}
 
 const app = new Elysia()
+  .onRequest(({ request }: { request: Request }) => {
+    log(`→ ${request.method} ${new URL(request.url).pathname}`);
+  })
+  .onAfterHandle(({ request }: { request: Request }) => {
+    log(`← ${request.method} ${new URL(request.url).pathname}`);
+  })
+  .onError(({ request, error }) => {
+    log(`✗ ${request.method} ${new URL(request.url).pathname} ERROR`, {
+      message: String(error),
+    });
+  })
   .get("/health", () => ({
     status: "ok",
     timestamp: new Date().toISOString(),
     service: "nba-predict",
   }))
   .post("/telegram/webhook", async ({ request }) => {
-    const { getBot } = await import("./bot");
-    await getBot().webhooks.telegram!(request);
-    return { ok: true };
+    const cloned = request.clone();
+    const body = await cloned.json().catch(() => null);
+    log("TELEGRAM WEBHOOK BODY", body);
+
+    try {
+      const { getBot } = await import("./bot");
+      const bot = await getBot();
+      const result = await bot.webhooks.telegram!(request);
+      log("TELEGRAM WEBHOOK RESULT", { ok: true });
+      return { ok: true };
+    } catch (err: any) {
+      log("TELEGRAM WEBHOOK ERROR", { message: err.message, stack: err.stack });
+      return { ok: false, error: err.message };
+    }
   })
   .get("/api/predictions", async ({ query }) => {
     const { db } = await import("./db");

@@ -1,9 +1,8 @@
-import type { Chat } from "chat";
+import type { Chat, Message, Thread } from "chat";
 import {
   upsertSubscriber,
   deactivateSubscriber,
   getPredictionsByDate,
-  getActiveSubscribers,
 } from "../db/queries";
 import { formatDailyPredictions } from "../lib/format";
 
@@ -11,11 +10,14 @@ function todayDate(): string {
   return new Date().toISOString().split("T")[0]!;
 }
 
-export function registerCommands(bot: Chat) {
-  // /start or first DM — subscribe the user
-  bot.onNewMessage(/^\/(start|subscribe)$/i, async (thread, message) => {
+async function handleCommand(thread: Thread, message: Message) {
+  const text = message.text?.trim() ?? "";
+
+  // /start or /subscribe
+  if (/^\/(start|subscribe)$/i.test(text)) {
     const chatId = thread.id;
-    const name = message.author?.fullName ?? message.author?.userName ?? "NBA Fan";
+    const name =
+      message.author?.fullName ?? message.author?.userName ?? "NBA Fan";
 
     await upsertSubscriber({
       platformId: `telegram:${chatId}`,
@@ -27,22 +29,26 @@ export function registerCommands(bot: Chat) {
         `You're now subscribed to daily predictions.\n\n` +
         `*Commands:*\n` +
         `/today — Today's predictions\n` +
+        `/repredict — Tomorrow's predictions\n` +
+        `/repredict 2026-04-01 — Predictions for any date\n` +
+        `/predict LAL — On-demand team prediction\n` +
         `/accuracy — Prediction accuracy stats\n` +
-        `/unsubscribe — Stop receiving predictions\n` +
-        `/predict <TEAM> — On-demand prediction for a team`
+        `/unsubscribe — Stop receiving predictions`
     );
-  });
+    return;
+  }
 
-  // Unsubscribe
-  bot.onNewMessage(/^\/unsubscribe$/i, async (thread) => {
+  // /unsubscribe
+  if (/^\/unsubscribe$/i.test(text)) {
     await deactivateSubscriber(`telegram:${thread.id}`);
     await thread.post(
       "You've been unsubscribed. Send /start to resubscribe anytime."
     );
-  });
+    return;
+  }
 
-  // Today's predictions
-  bot.onNewMessage(/^\/today$/i, async (thread) => {
+  // /today
+  if (/^\/today$/i.test(text)) {
     const date = todayDate();
     const preds = await getPredictionsByDate(date);
 
@@ -53,7 +59,6 @@ export function registerCommands(bot: Chat) {
       return;
     }
 
-    // Group predictions by type — player picks first
     const playerProps = preds
       .filter((p) => p.type === "player_prop")
       .map((p) => p.prediction as any);
@@ -70,7 +75,7 @@ export function registerCommands(bot: Chat) {
       .filter((p) => p.type === "spread")
       .map((p) => p.prediction as any);
 
-    const message = formatDailyPredictions({
+    const msg = formatDailyPredictions({
       date,
       playerProps,
       specials,
@@ -79,12 +84,12 @@ export function registerCommands(bot: Chat) {
       spreads,
     });
 
-    await thread.post(message);
-  });
+    await thread.post(msg);
+    return;
+  }
 
-  // Accuracy stats
-  bot.onNewMessage(/^\/accuracy$/i, async (thread) => {
-    // Import dynamically to avoid circular deps
+  // /accuracy
+  if (/^\/accuracy$/i.test(text)) {
     const { db } = await import("../db");
     const { predictions } = await import("../db/schema");
     const { isNotNull, sql } = await import("drizzle-orm");
@@ -100,7 +105,9 @@ export function registerCommands(bot: Chat) {
       .groupBy(predictions.type);
 
     if (stats.length === 0) {
-      await thread.post("No graded predictions yet. Check back after games finish!");
+      await thread.post(
+        "No graded predictions yet. Check back after games finish!"
+      );
       return;
     }
 
@@ -112,45 +119,94 @@ export function registerCommands(bot: Chat) {
     }
 
     await thread.post(lines.join("\n"));
-  });
+    return;
+  }
 
-  // On-demand prediction for a specific team
-  bot.onNewMessage(/^\/predict\s+(\w+)$/i, async (thread, message) => {
-    const teamAbbr = message.text?.match(/^\/predict\s+(\w+)$/i)?.[1];
-    if (!teamAbbr) {
-      await thread.post("Usage: /predict LAL (use team abbreviation)");
+  // /repredict <DATE> — run predictions for a custom date
+  const repredictMatch = text.match(
+    /^\/repredict(?:\s+(\d{4}-\d{2}-\d{2}))?$/i
+  );
+  if (repredictMatch) {
+    // Default to tomorrow if no date given
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const date =
+      repredictMatch[1] ?? tomorrow.toISOString().split("T")[0]!;
+
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) {
+      await thread.post("Invalid date. Usage: /repredict 2026-04-01");
       return;
     }
 
     await thread.post(
-      `🔍 Analyzing ${teamAbbr.toUpperCase()}... This may take a moment.`
+      `🔄 Running predictions for *${date}*... This may take a few minutes.`
     );
 
-    // Trigger the on-demand prediction via Trigger.dev
+    try {
+      const { tasks } = await import("@trigger.dev/sdk/v3");
+      const { repredictTask } = await import("../../trigger/repredict");
+      await tasks.trigger(repredictTask.id, {
+        date,
+        chatId: thread.id,
+      });
+    } catch {
+      await thread.post("Sorry, couldn't start predictions. Try again later.");
+    }
+    return;
+  }
+
+  // /predict <TEAM>
+  const predictMatch = text.match(/^\/predict\s+(\w+)$/i);
+  if (predictMatch) {
+    const teamAbbr = predictMatch[1]!.toUpperCase();
+    await thread.post(
+      `🔍 Analyzing ${teamAbbr}... This may take a moment.`
+    );
+
     try {
       const { tasks } = await import("@trigger.dev/sdk/v3");
       const { onDemandPredict } = await import(
         "../../trigger/on-demand-predict"
       );
       await tasks.trigger(onDemandPredict.id, {
-        teamAbbr: teamAbbr.toUpperCase(),
+        teamAbbr,
         chatId: thread.id,
       });
-    } catch (err) {
-      await thread.post(
-        `Sorry, couldn't start analysis. Try again later.`
-      );
+    } catch {
+      await thread.post("Sorry, couldn't start analysis. Try again later.");
     }
+    return;
+  }
+
+  // Unknown command
+  if (text.startsWith("/")) {
+    await thread.post(
+      `Unknown command. Try:\n/today — Today's picks\n/repredict — Tomorrow's picks\n/predict LAL — Team prediction\n/accuracy — Stats`
+    );
+    return;
+  }
+
+  // Non-command message
+  await thread.post(
+    "Send a command to get started:\n/start — Subscribe\n/today — Today's picks\n/repredict — Tomorrow's picks\n/predict LAL — Team prediction"
+  );
+}
+
+export function registerCommands(bot: Chat) {
+  // Handle DMs (private messages to the bot)
+  bot.onDirectMessage(async (thread, message) => {
+    await handleCommand(thread, message);
   });
 
-  // Catch-all for unknown commands
-  bot.onNewMessage(/^\//, async (thread, message) => {
-    const knownCommands = ["/start", "/subscribe", "/unsubscribe", "/today", "/accuracy", "/predict"];
-    const cmd = message.text?.split(" ")[0]?.toLowerCase();
-    if (cmd && knownCommands.some((k) => cmd === k)) return; // handled above
+  // Handle @mentions in groups
+  bot.onNewMention(async (thread, message) => {
+    await handleCommand(thread, message);
+  });
 
-    await thread.post(
-      `Unknown command. Try:\n/today — Today's predictions\n/accuracy — Stats\n/predict LAL — Team prediction`
-    );
+  // Handle messages in subscribed threads
+  bot.onSubscribedMessage(async (thread, message) => {
+    if (message.author?.isMe) return;
+    await handleCommand(thread, message);
   });
 }
