@@ -10,6 +10,49 @@ function todayDate(): string {
   return new Date().toISOString().split("T")[0]!;
 }
 
+// Track active runs per user (chatId → { runId, taskName, date, startedAt })
+const activeRuns = new Map<
+  string,
+  Array<{ runId: string; task: string; date: string; startedAt: Date }>
+>();
+
+function trackRun(chatId: string, runId: string, task: string, date: string) {
+  const runs = activeRuns.get(chatId) ?? [];
+  runs.push({ runId, task, date, startedAt: new Date() });
+  // Keep only last 5 runs per user
+  if (runs.length > 5) runs.shift();
+  activeRuns.set(chatId, runs);
+}
+
+function formatStatus(status: string): string {
+  switch (status) {
+    case "QUEUED":
+      return "⏳ Queued";
+    case "EXECUTING":
+      return "🔄 Running";
+    case "COMPLETED":
+      return "✅ Completed";
+    case "FAILED":
+      return "❌ Failed";
+    case "CANCELED":
+      return "🚫 Canceled";
+    case "REATTEMPTING":
+      return "🔁 Retrying";
+    case "FROZEN":
+      return "🧊 Frozen";
+    default:
+      return `⏺ ${status}`;
+  }
+}
+
+function elapsed(startedAt: Date): string {
+  const sec = Math.floor((Date.now() - startedAt.getTime()) / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const remSec = sec % 60;
+  return `${min}m ${remSec}s`;
+}
+
 async function handleCommand(thread: Thread, message: Message) {
   const text = message.text?.trim() ?? "";
 
@@ -32,6 +75,7 @@ async function handleCommand(thread: Thread, message: Message) {
         `/repredict — Tomorrow's predictions\n` +
         `/repredict 2026-04-01 — Predictions for any date\n` +
         `/predict LAL — On-demand team prediction\n` +
+        `/status — Check running predictions\n` +
         `/accuracy — Prediction accuracy stats\n` +
         `/unsubscribe — Stop receiving predictions`
     );
@@ -44,6 +88,45 @@ async function handleCommand(thread: Thread, message: Message) {
     await thread.post(
       "You've been unsubscribed. Send /start to resubscribe anytime."
     );
+    return;
+  }
+
+  // /status — check running predictions
+  if (/^\/status$/i.test(text)) {
+    const chatId = thread.id;
+    const runs = activeRuns.get(chatId);
+
+    if (!runs || runs.length === 0) {
+      await thread.post("No recent prediction runs. Use /repredict or /predict to start one.");
+      return;
+    }
+
+    try {
+      const { runs: runsApi } = await import("@trigger.dev/sdk/v3");
+
+      const lines = ["📋 *Your Prediction Runs*\n"];
+
+      for (const run of runs) {
+        try {
+          const details = await runsApi.retrieve(run.runId);
+          const status = formatStatus(details.status);
+          lines.push(
+            `${status} *${run.task}* (${run.date})\n` +
+              `  Started: ${elapsed(run.startedAt)} ago` +
+              (details.status === "COMPLETED" ? ` ✓` : "")
+          );
+        } catch {
+          lines.push(
+            `⏺ *${run.task}* (${run.date})\n` +
+              `  Started: ${elapsed(run.startedAt)} ago — status unknown`
+          );
+        }
+      }
+
+      await thread.post(lines.join("\n"));
+    } catch {
+      await thread.post("Couldn't fetch run status. Try again later.");
+    }
     return;
   }
 
@@ -127,29 +210,28 @@ async function handleCommand(thread: Thread, message: Message) {
     /^\/repredict(?:\s+(\d{4}-\d{2}-\d{2}))?$/i
   );
   if (repredictMatch) {
-    // Default to tomorrow if no date given
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const date =
       repredictMatch[1] ?? tomorrow.toISOString().split("T")[0]!;
 
-    // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) {
       await thread.post("Invalid date. Usage: /repredict 2026-04-01");
       return;
     }
 
     await thread.post(
-      `🔄 Running predictions for *${date}*... This may take a few minutes.`
+      `🔄 Running predictions for *${date}*... This may take a few minutes.\nUse /status to check progress.`
     );
 
     try {
       const { tasks } = await import("@trigger.dev/sdk/v3");
       const { repredictTask } = await import("../../trigger/repredict");
-      await tasks.trigger(repredictTask.id, {
+      const handle = await tasks.trigger(repredictTask.id, {
         date,
         chatId: thread.id,
       });
+      trackRun(thread.id, handle.id, "repredict", date);
     } catch {
       await thread.post("Sorry, couldn't start predictions. Try again later.");
     }
@@ -161,7 +243,7 @@ async function handleCommand(thread: Thread, message: Message) {
   if (predictMatch) {
     const teamAbbr = predictMatch[1]!.toUpperCase();
     await thread.post(
-      `🔍 Analyzing ${teamAbbr}... This may take a moment.`
+      `🔍 Analyzing ${teamAbbr}... This may take a moment.\nUse /status to check progress.`
     );
 
     try {
@@ -169,10 +251,11 @@ async function handleCommand(thread: Thread, message: Message) {
       const { onDemandPredict } = await import(
         "../../trigger/on-demand-predict"
       );
-      await tasks.trigger(onDemandPredict.id, {
+      const handle = await tasks.trigger(onDemandPredict.id, {
         teamAbbr,
         chatId: thread.id,
       });
+      trackRun(thread.id, handle.id, "predict", teamAbbr);
     } catch {
       await thread.post("Sorry, couldn't start analysis. Try again later.");
     }
@@ -182,7 +265,7 @@ async function handleCommand(thread: Thread, message: Message) {
   // Unknown command
   if (text.startsWith("/")) {
     await thread.post(
-      `Unknown command. Try:\n/today — Today's picks\n/repredict — Tomorrow's picks\n/predict LAL — Team prediction\n/accuracy — Stats`
+      `Unknown command. Try:\n/today — Today's picks\n/repredict — Tomorrow's picks\n/predict LAL — Team prediction\n/status — Check running predictions\n/accuracy — Stats`
     );
     return;
   }
@@ -194,17 +277,14 @@ async function handleCommand(thread: Thread, message: Message) {
 }
 
 export function registerCommands(bot: Chat) {
-  // Handle DMs (private messages to the bot)
   bot.onDirectMessage(async (thread, message) => {
     await handleCommand(thread, message);
   });
 
-  // Handle @mentions in groups
   bot.onNewMention(async (thread, message) => {
     await handleCommand(thread, message);
   });
 
-  // Handle messages in subscribed threads
   bot.onSubscribedMessage(async (thread, message) => {
     if (message.author?.isMe) return;
     await handleCommand(thread, message);
